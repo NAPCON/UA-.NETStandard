@@ -158,9 +158,11 @@ namespace Opc.Ua
 
             encoder.PushNamespace(Namespaces.OpcUaXsd);
 
-            if (m_eventNotifier != 0)
+            byte eventNotifier = m_eventNotifier;
+
+            if (eventNotifier != 0)
             {
-                encoder.WriteByte("EventNotifier", m_eventNotifier);
+                encoder.WriteByte("EventNotifier", eventNotifier);
             }
 
             encoder.PopNamespace();
@@ -252,9 +254,11 @@ namespace Opc.Ua
                 {
                     byte eventNotifier = m_eventNotifier;
 
-                    if (OnReadEventNotifier != null)
+                    NodeAttributeEventHandler<byte> readEventNotifier = OnReadEventNotifier;
+                    
+                    if (readEventNotifier != null)
                     {
-                        result = OnReadEventNotifier(context, this, ref eventNotifier);
+                        result = readEventNotifier(context, this, ref eventNotifier);
                     }
 
                     if (ServiceResult.IsGood(result))
@@ -299,9 +303,11 @@ namespace Opc.Ua
 
                     byte eventNotifier = eventNotifierRef.Value;
 
-                    if (OnWriteEventNotifier != null)
+                    NodeAttributeEventHandler<byte> writeEventNotifier = OnWriteEventNotifier;
+
+                    if (writeEventNotifier != null)
                     {
-                        result = OnWriteEventNotifier(context, this, ref eventNotifier);
+                        result = writeEventNotifier(context, this, ref eventNotifier);
                     }
 
                     if (ServiceResult.IsGood(result))
