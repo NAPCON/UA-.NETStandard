@@ -144,14 +144,18 @@ namespace Opc.Ua
 
             encoder.PushNamespace(Namespaces.OpcUaXsd);
 
-            if (!LocalizedText.IsNullOrEmpty(m_inverseName))
+            LocalizedText inverseName = m_inverseName;
+
+            if (!LocalizedText.IsNullOrEmpty(inverseName))
             {
-                encoder.WriteLocalizedText("InverseName", m_inverseName);
+                encoder.WriteLocalizedText("InverseName", inverseName);
             }
 
-            if (m_symmetric)
+            bool symmetric = m_symmetric;
+
+            if (symmetric)
             {
-                encoder.WriteBoolean("Symmetric", m_symmetric);
+                encoder.WriteBoolean("Symmetric", symmetric);
             }
 
             encoder.PopNamespace();
@@ -285,9 +289,11 @@ namespace Opc.Ua
                 {
                     LocalizedText inverseName = m_inverseName;
 
-                    if (OnReadInverseName != null)
+                    NodeAttributeEventHandler<LocalizedText> onReadInverseName = OnReadInverseName;
+
+                    if (onReadInverseName != null)
                     {
-                        result = OnReadInverseName(context, this, ref inverseName);
+                        result = onReadInverseName(context, this, ref inverseName);
                     }
 
                     if (ServiceResult.IsGood(result))
@@ -302,9 +308,11 @@ namespace Opc.Ua
                 {
                     bool symmetric = m_symmetric;
 
-                    if (OnReadSymmetric != null)
+                    NodeAttributeEventHandler<bool> onReadSymmetric = OnReadSymmetric;
+
+                    if (onReadSymmetric != null)
                     {
-                        result = OnReadSymmetric(context, this, ref symmetric);
+                        result = onReadSymmetric(context, this, ref symmetric);
                     }
 
                     if (ServiceResult.IsGood(result))
@@ -347,9 +355,11 @@ namespace Opc.Ua
                         return StatusCodes.BadNotWritable;
                     }
 
-                    if (OnWriteInverseName != null)
+                    NodeAttributeEventHandler<LocalizedText> onWriteInverseName = OnWriteInverseName;
+
+                    if (onWriteInverseName != null)
                     {
-                        result = OnWriteInverseName(context, this, ref inverseName);
+                        result = onWriteInverseName(context, this, ref inverseName);
                     }
 
                     if (ServiceResult.IsGood(result))
@@ -376,9 +386,11 @@ namespace Opc.Ua
 
                     bool symmetric = symmetricRef.Value;
 
-                    if (OnWriteSymmetric != null)
+                    NodeAttributeEventHandler<bool> onWriteSymmetric = OnWriteSymmetric;
+
+                    if (onWriteSymmetric != null)
                     {
-                        result = OnWriteSymmetric(context, this, ref symmetric);
+                        result = onWriteSymmetric(context, this, ref symmetric);
                     }
 
                     if (ServiceResult.IsGood(result))
