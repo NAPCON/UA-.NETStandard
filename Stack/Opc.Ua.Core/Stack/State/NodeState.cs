@@ -1071,22 +1071,29 @@ namespace Opc.Ua
         /// <param name="decoder">The decoder to read from.</param>
         public void UpdateReferences(ISystemContext context, BinaryDecoder decoder)
         {
+            int count = decoder.ReadInt32(null);
+
+            List<NodeStateReference> references = new List<NodeStateReference>();
+
+            // Collect references to temporary list first to avoid unnecessary locking during the deserialization.
+            for (int ii = 0; ii < count; ii++)
+            {
+                NodeId referenceTypeId = decoder.ReadNodeId(null);
+                bool isInverse = decoder.ReadBoolean(null);
+                ExpandedNodeId targetId = decoder.ReadExpandedNodeId(null);
+                references.Add(new NodeStateReference(referenceTypeId, isInverse, targetId));
+            }
+
             lock (m_referencesLock)
             {
-                int count = decoder.ReadInt32(null);
-
-                for (int ii = 0; ii < count; ii++)
+                if (m_references == null)
                 {
-                    NodeId referenceTypeId = decoder.ReadNodeId(null);
-                    bool isInverse = decoder.ReadBoolean(null);
-                    ExpandedNodeId targetId = decoder.ReadExpandedNodeId(null);
+                    m_references = new IReferenceDictionary<object>();
+                }
 
-                    if (m_references == null)
-                    {
-                        m_references = new IReferenceDictionary<object>();
-                    }
-
-                    m_references[new NodeStateReference(referenceTypeId, isInverse, targetId)] = null;
+                foreach (NodeStateReference reference in references)
+                {
+                    m_references[reference] = null;
                 }
             }
         }

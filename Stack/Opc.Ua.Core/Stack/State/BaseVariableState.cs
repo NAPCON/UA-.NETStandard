@@ -1424,10 +1424,10 @@ namespace Opc.Ua
                 {
                     byte userAccessLevel = m_userAccessLevel;
 
-                    NodeAttributeEventHandler<byte> onReadAccessLevel = OnReadAccessLevel;
-                    if (onReadAccessLevel != null)
+                    NodeAttributeEventHandler<byte> onReadUserAccessLevel = OnReadUserAccessLevel;
+                    if (onReadUserAccessLevel != null)
                     {
-                        result = onReadAccessLevel(context, this, ref userAccessLevel);
+                        result = onReadUserAccessLevel(context, this, ref userAccessLevel);
                     }
 
                     if (ServiceResult.IsGood(result))
