@@ -87,18 +87,24 @@ namespace Opc.Ua
         {
             BaseInstanceState clone = new BaseInstanceState(this.NodeClass, this.Parent);
 
-            if (m_children != null)
+            lock (m_childrenLock)
             {
-                clone.m_children = new List<BaseInstanceState>(m_children.Count);
-
-                for (int ii = 0; ii < m_children.Count; ii++)
+                lock (clone.m_childrenLock)
                 {
-                    BaseInstanceState child = (BaseInstanceState)m_children[ii].MemberwiseClone();
-                    clone.m_children.Add(child);
+                    if (m_children != null)
+                    {
+                        clone.m_children = new List<BaseInstanceState>(m_children.Count);
+
+                        for (int ii = 0; ii < m_children.Count; ii++)
+                        {
+                            BaseInstanceState child = (BaseInstanceState)m_children[ii].MemberwiseClone();
+                            clone.m_children.Add(child);
+                        }
+                    }
+
+                    clone.m_changeMasks = NodeStateChangeMasks.None;
                 }
             }
-
-            clone.m_changeMasks = NodeStateChangeMasks.None;
 
             return clone;
         }
@@ -134,8 +140,10 @@ namespace Opc.Ua
         public string GetDisplayPath(int maxLength, char seperator)
         {
             string name = GetNonNullText(this);
-            
-            if (m_parent == null)
+
+            NodeState stateParent = m_parent;
+
+            if (stateParent == null)
             {
                 return name;
             }
@@ -144,21 +152,21 @@ namespace Opc.Ua
               
             if (maxLength > 2)
             {
-                NodeState parent = m_parent;
+                NodeState currentParent = stateParent;
                 List<string> names = new List<string>();
                 
-                while (parent != null)
+                while (currentParent != null)
                 {
-                    BaseInstanceState instance = parent as BaseInstanceState;
+                    BaseInstanceState instance = currentParent as BaseInstanceState;
 
                     if (instance == null)
                     {
                         break;
                     }
                    
-                    parent = instance.Parent;
+                    currentParent = instance.Parent;
                     
-                    string parentName = GetNonNullText(parent);
+                    string parentName = GetNonNullText(currentParent);
                     names.Add(parentName);
 
                     if (names.Count == maxLength-2)
@@ -174,7 +182,7 @@ namespace Opc.Ua
                 }
             }
             
-            buffer.Append(GetNonNullText(m_parent));
+            buffer.Append(GetNonNullText(stateParent));
             buffer.Append(seperator);
             buffer.Append(name);
 
@@ -288,10 +296,7 @@ namespace Opc.Ua
             base.ReportEvent(context, e);
 
             // recusively notify the parent.
-            if (m_parent != null)
-            {
-                m_parent.ReportEvent(context, e);
-            }
+            m_parent?.ReportEvent(context, e);
         }
 
         /// <summary>
@@ -551,24 +556,32 @@ namespace Opc.Ua
 
             encoder.PushNamespace(Namespaces.OpcUaXsd);
 
-            if (!NodeId.IsNull(m_referenceTypeId))
+            NodeId referenceTypeId = m_referenceTypeId;
+
+            if (!NodeId.IsNull(referenceTypeId))
             {
-                encoder.WriteNodeId("ReferenceTypeId", m_referenceTypeId);
+                encoder.WriteNodeId("ReferenceTypeId", referenceTypeId);
             }
 
-            if (!NodeId.IsNull(m_typeDefinitionId))
+            NodeId typeDefinitionId = m_typeDefinitionId;
+
+            if (!NodeId.IsNull(typeDefinitionId))
             {
-                encoder.WriteNodeId("TypeDefinitionId", m_typeDefinitionId);
+                encoder.WriteNodeId("TypeDefinitionId", typeDefinitionId);
             }
 
-            if (!NodeId.IsNull(m_modellingRuleId))
+            NodeId modellingRuleId = m_modellingRuleId;
+
+            if (!NodeId.IsNull(modellingRuleId))
             {
-                encoder.WriteNodeId("ModellingRuleId", m_modellingRuleId);
+                encoder.WriteNodeId("ModellingRuleId", modellingRuleId);
             }
 
-            if (m_numericId != 0)
+            uint numericId = m_numericId;
+
+            if (numericId != 0)
             {
-                encoder.WriteUInt32("NumericId", m_numericId);
+                encoder.WriteUInt32("NumericId", numericId);
             }
 
             encoder.PopNamespace();
@@ -711,35 +724,41 @@ namespace Opc.Ua
         {
             base.PopulateBrowser(context, browser);
 
-            if (!NodeId.IsNull(m_typeDefinitionId))
+            NodeId typeDefinitionId = m_typeDefinitionId;
+            if (!NodeId.IsNull(typeDefinitionId))
             {
                 if (browser.IsRequired(ReferenceTypeIds.HasTypeDefinition, false))
                 {
-                    browser.Add(ReferenceTypeIds.HasTypeDefinition, false, m_typeDefinitionId);
+                    browser.Add(ReferenceTypeIds.HasTypeDefinition, false, typeDefinitionId);
                 }
             }
 
-            if (!NodeId.IsNull(m_modellingRuleId))
+            NodeId modellingRuleId = m_modellingRuleId;
+            if (!NodeId.IsNull(modellingRuleId))
             {
                 if (browser.IsRequired(ReferenceTypeIds.HasModellingRule, false))
                 {
-                    browser.Add(ReferenceTypeIds.HasModellingRule, false, m_modellingRuleId);
+                    browser.Add(ReferenceTypeIds.HasModellingRule, false, modellingRuleId);
                 }
             }
 
-            if (m_parent != null)
+            NodeState parent = this.m_parent;
+
+            if (parent != null)
             {
-                if (!NodeId.IsNull(m_referenceTypeId))
+                NodeId referenceTypeId = this.m_referenceTypeId;
+
+                if (!NodeId.IsNull(referenceTypeId))
                 {
-                    if (browser.IsRequired(m_referenceTypeId, true))
+                    if (browser.IsRequired(referenceTypeId, true))
                     {
-                        browser.Add(m_referenceTypeId, true, m_parent);
+                        browser.Add(referenceTypeId, true, parent);
                     }
                 }
             }
         }
         #endregion
-        
+
         #region Private Fields
         private NodeState m_parent;
         private NodeId m_referenceTypeId;
