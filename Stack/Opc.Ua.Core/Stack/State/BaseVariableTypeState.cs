@@ -266,7 +266,7 @@ namespace Opc.Ua
 
             int valueRank = ValueRank;
 
-            if (valueRank != ValueRanks.Any)
+            if (valueRank != ValueRanks.OneOrMoreDimensions)
             {
                 encoder.WriteInt32("ValueRank", valueRank);
             }
@@ -334,7 +334,7 @@ namespace Opc.Ua
                 attributesToSave |= AttributesToSave.DataType;
             }
 
-            if (m_valueRank != ValueRanks.Any)
+            if (m_valueRank != ValueRanks.OneOrMoreDimensions)
             {
                 attributesToSave |= AttributesToSave.ValueRank;
             }
