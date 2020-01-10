@@ -53,23 +53,28 @@ namespace Opc.Ua
 
             if (instance != null)
             {
-                m_value = ExtractValueFromVariant(context, instance.m_value, false);
-                m_timestamp = instance.m_timestamp;
-                m_statusCode = instance.m_statusCode;
-                m_dataType = instance.m_dataType;
-                m_valueRank = instance.m_valueRank;
-                m_arrayDimensions = null;
-                m_accessLevel = instance.m_accessLevel;
-                m_userAccessLevel = instance.m_userAccessLevel;
-                m_minimumSamplingInterval = instance.m_minimumSamplingInterval;
-                m_historizing = instance.m_historizing;
-
-                if (instance.m_arrayDimensions != null)
+                lock (m_valueLock)
                 {
-                    m_arrayDimensions = new ReadOnlyList<uint>(instance.m_arrayDimensions, true);
+                    lock (instance.m_valueLock)
+                    {
+
+                        m_value = ExtractValueFromVariant(context, instance.m_value, false);
+                        m_timestamp = instance.m_timestamp;
+                        m_statusCode = instance.m_statusCode;
+                        m_value = ExtractValueFromVariant(context, m_value, false);
+                    }
                 }
 
-                m_value = ExtractValueFromVariant(context, m_value, false);
+                m_minimumSamplingInterval = instance.m_minimumSamplingInterval;
+                m_dataType = instance.m_dataType;
+                m_valueRank = instance.m_valueRank;
+                m_accessLevel = instance.m_accessLevel;
+                m_userAccessLevel = instance.m_userAccessLevel;
+                
+                m_historizing = instance.m_historizing;
+
+                ReadOnlyList<uint> arrayDimensions = instance.m_arrayDimensions;
+                m_arrayDimensions = arrayDimensions == null ? null : new ReadOnlyList<uint>(arrayDimensions, true);
             }
 
             base.Initialize(context, source);
@@ -452,7 +457,10 @@ namespace Opc.Ua
         {
             get
             {
-                return m_value;
+                lock (m_valueLock)
+                {
+                    return m_value;
+                }
             }
 
             set
@@ -462,12 +470,15 @@ namespace Opc.Ua
                     value = ExtractValueFromVariant(null, value, false);
                 }
 
-                if (!Object.ReferenceEquals(m_value, value))
+                lock (m_valueLock)
                 {
-                    ChangeMasks |= NodeStateChangeMasks.Value;
-                }
+                    if (!Object.ReferenceEquals(m_value, value))
+                    {
+                        ChangeMasks |= NodeStateChangeMasks.Value;
+                    }
 
-                m_value = value;
+                    m_value = value;
+                }
             }
         }
 
@@ -489,7 +500,7 @@ namespace Opc.Ua
         {
             get
             {
-                return new Variant(m_value);
+                return new Variant(Value);
             }
 
             set
@@ -506,17 +517,23 @@ namespace Opc.Ua
         {
             get
             {
-                return m_timestamp;
+                lock(m_valueLock)
+                {
+                    return m_timestamp;
+                }
             }
 
             set
             {
-                if (m_timestamp != value)
+                lock (m_valueLock)
                 {
-                    ChangeMasks |= NodeStateChangeMasks.Value;
-                }
+                    if (m_timestamp != value)
+                    {
+                        ChangeMasks |= NodeStateChangeMasks.Value;
+                    }
 
-                m_timestamp = value;
+                    m_timestamp = value;
+                }
             }
         }
 
@@ -528,17 +545,23 @@ namespace Opc.Ua
         {
             get
             {
-                return m_statusCode;
+                lock (m_valueLock)
+                {
+                    return m_statusCode;
+                }
             }
 
             set
             {
-                if (m_statusCode != value)
+                lock (m_valueLock)
                 {
-                    ChangeMasks |= NodeStateChangeMasks.Value;
-                }
+                    if (m_statusCode != value)
+                    {
+                        ChangeMasks |= NodeStateChangeMasks.Value;
+                    }
 
-                m_statusCode = value;
+                    m_statusCode = value;
+                }
             }
         }
 
@@ -870,9 +893,10 @@ namespace Opc.Ua
                     variableNode.ValueRank = this.ValueRank;
                     variableNode.ArrayDimensions = null;
 
-                    if (this.ArrayDimensions != null)
+                    ReadOnlyList<uint> arrayDimensions = this.ArrayDimensions;
+                    if (arrayDimensions != null)
                     {
-                        variableNode.ArrayDimensions = new UInt32Collection(this.ArrayDimensions);
+                        variableNode.ArrayDimensions = new UInt32Collection(arrayDimensions);
                     }
 
                     variableNode.AccessLevel = this.AccessLevel;
@@ -898,49 +922,66 @@ namespace Opc.Ua
 
             encoder.PushNamespace(Namespaces.OpcUaXsd);
 
-            if (m_value != null)
+            lock (m_valueLock)
             {
-                encoder.WriteVariant("Value", WrappedValue);
+                if (m_value != null)
+                {
+                    encoder.WriteVariant("Value", WrappedValue);
+                }
+
+                if (StatusCode != StatusCodes.Good)
+                {
+                    encoder.WriteStatusCode("StatusCode", StatusCode);
+                }
             }
 
-            if (StatusCode != StatusCodes.Good)
+            NodeId dataType = DataType;
+
+            if (!NodeId.IsNull(dataType))
             {
-                encoder.WriteStatusCode("StatusCode", StatusCode);
+                encoder.WriteNodeId("DataType", dataType);
             }
 
-            if (!NodeId.IsNull(DataType))
+            int valueRank = ValueRank;
+
+            if (valueRank != ValueRanks.Any)
             {
-                encoder.WriteNodeId("DataType", DataType);
+                encoder.WriteInt32("ValueRank", valueRank);
             }
 
-            if (ValueRank != ValueRanks.Any)
+            ReadOnlyList<uint> arrayDimensions = this.ArrayDimensions;
+
+            if (arrayDimensions != null)
             {
-                encoder.WriteInt32("ValueRank", ValueRank);
+                encoder.WriteString("ArrayDimensions", ArrayDimensionsToXml(arrayDimensions));
             }
 
-            if (ArrayDimensions != null)
+            byte accessLevel = AccessLevel;
+
+            if (accessLevel != 0)
             {
-                encoder.WriteString("ArrayDimensions", ArrayDimensionsToXml(ArrayDimensions));
+                encoder.WriteByte("AccessLevel", accessLevel);
             }
 
-            if (AccessLevel != 0)
+            byte userAccessLevel = UserAccessLevel;
+
+            if (userAccessLevel != 0)
             {
-                encoder.WriteByte("AccessLevel", AccessLevel);
+                encoder.WriteByte("UserAccessLevel", userAccessLevel);
             }
 
-            if (UserAccessLevel != 0)
+            double minimumSamplingInterval = MinimumSamplingInterval;
+
+            if (minimumSamplingInterval != 0)
             {
-                encoder.WriteByte("UserAccessLevel", UserAccessLevel);
+                encoder.WriteDouble("MinimumSamplingInterval", minimumSamplingInterval);
             }
 
-            if (MinimumSamplingInterval != 0)
-            {
-                encoder.WriteDouble("MinimumSamplingInterval", MinimumSamplingInterval);
-            }
+            bool historizing = Historizing;
 
-            if (Historizing)
+            if (historizing)
             {
-                encoder.WriteBoolean("Historizing", Historizing);
+                encoder.WriteBoolean("Historizing", historizing);
             }
 
             encoder.PopNamespace();
@@ -957,23 +998,27 @@ namespace Opc.Ua
 
             decoder.PushNamespace(Namespaces.OpcUaXsd);
 
-            if (decoder.Peek("Value"))
+            lock (m_valueLock)
             {
-                WrappedValue = decoder.ReadVariant("Value");
-            }
 
-            if (decoder.Peek("Timestamp"))
-            {
-                Timestamp = decoder.ReadDateTime("Timestamp");
-            }
+                if (decoder.Peek("Value"))
+                {
+                    WrappedValue = decoder.ReadVariant("Value");
+                }
 
-            if (decoder.Peek("StatusCode"))
-            {
-                StatusCode = decoder.ReadStatusCode("StatusCode");
-            }
-            else
-            {
-                StatusCode = StatusCodes.Good;
+                if (decoder.Peek("Timestamp"))
+                {
+                    Timestamp = decoder.ReadDateTime("Timestamp");
+                }
+
+                if (decoder.Peek("StatusCode"))
+                {
+                    StatusCode = decoder.ReadStatusCode("StatusCode");
+                }
+                else
+                {
+                    StatusCode = StatusCodes.Good;
+                }
             }
 
             if (decoder.Peek("DataType"))
@@ -986,24 +1031,28 @@ namespace Opc.Ua
                 ValueRank = decoder.ReadInt32("ValueRank");
             }
 
-            // ensure the value has a suitable default value.
-            if (m_value == null && m_valueRank == ValueRanks.Scalar)
+            lock (m_valueLock)
             {
-                bool isValueType = IsValueType;
 
-                if (!isValueType)
+                // ensure the value has a suitable default value.
+                if (m_value == null && m_valueRank == ValueRanks.Scalar)
                 {
-                    BuiltInType builtInType = DataTypes.GetBuiltInType(m_dataType, context.TypeTable);
+                    bool isValueType = IsValueType;
 
-                    if (TypeInfo.IsValueType(builtInType))
+                    if (!isValueType)
                     {
-                        isValueType = true;
-                    }
-                }
+                        BuiltInType builtInType = DataTypes.GetBuiltInType(m_dataType, context.TypeTable);
 
-                if (isValueType)
-                {
-                    m_value = TypeInfo.GetDefaultValue(m_dataType, m_valueRank, context.TypeTable);
+                        if (TypeInfo.IsValueType(builtInType))
+                        {
+                            isValueType = true;
+                        }
+                    }
+
+                    if (isValueType)
+                    {
+                        m_value = TypeInfo.GetDefaultValue(m_dataType, m_valueRank, context.TypeTable);
+                    }
                 }
             }
 
@@ -1046,14 +1095,17 @@ namespace Opc.Ua
         {
             AttributesToSave attributesToSave = base.GetAttributesToSave(context);
 
-            if (m_value != null)
+            lock (m_valueLock)
             {
-                attributesToSave |= AttributesToSave.Value;
-            }
+                if (m_value != null)
+                {
+                    attributesToSave |= AttributesToSave.Value;
+                }
 
-            if (m_statusCode != StatusCodes.Good)
-            {
-                attributesToSave |= AttributesToSave.StatusCode;
+                if (m_statusCode != StatusCodes.Good)
+                {
+                    attributesToSave |= AttributesToSave.StatusCode;
+                }
             }
 
             if (!NodeId.IsNull(m_dataType))
@@ -1104,14 +1156,17 @@ namespace Opc.Ua
         {
             base.Save(context, encoder, attributesToSave);
 
-            if ((attributesToSave & AttributesToSave.Value) != 0)
+            lock (m_valueLock)
             {
-                encoder.WriteVariant(null, WrappedValue);
-            }
+                if ((attributesToSave & AttributesToSave.Value) != 0)
+                {
+                    encoder.WriteVariant(null, WrappedValue);
+                }
 
-            if ((attributesToSave & AttributesToSave.StatusCode) != 0)
-            {
-                encoder.WriteStatusCode(null, m_statusCode);
+                if ((attributesToSave & AttributesToSave.StatusCode) != 0)
+                {
+                    encoder.WriteStatusCode(null, m_statusCode);
+                }
             }
 
             if ((attributesToSave & AttributesToSave.DataType) != 0)
@@ -1160,14 +1215,17 @@ namespace Opc.Ua
         {
             base.Update(context, decoder, attibutesToLoad);
 
-            if ((attibutesToLoad & AttributesToSave.Value) != 0)
+            lock (m_valueLock)
             {
-                WrappedValue = decoder.ReadVariant(null);
-            }
+                if ((attibutesToLoad & AttributesToSave.Value) != 0)
+                {
+                    WrappedValue = decoder.ReadVariant(null);
+                }
 
-            if ((attibutesToLoad & AttributesToSave.StatusCode) != 0)
-            {
-                m_statusCode = decoder.ReadStatusCode(null);
+                if ((attibutesToLoad & AttributesToSave.StatusCode) != 0)
+                {
+                    m_statusCode = decoder.ReadStatusCode(null);
+                }
             }
 
             if ((attibutesToLoad & AttributesToSave.DataType) != 0)
@@ -1290,11 +1348,14 @@ namespace Opc.Ua
         {
             base.SetStatusCode(context, statusCode, timestamp);
 
-            StatusCode = statusCode;
-
-            if (timestamp != DateTime.MinValue)
+            lock (m_valueLock)
             {
-                Timestamp = timestamp;
+                StatusCode = statusCode;
+
+                if (timestamp != DateTime.MinValue)
+                {
+                    Timestamp = timestamp;
+                }
             }
         }
         #endregion
@@ -1324,9 +1385,10 @@ namespace Opc.Ua
                 {
                     NodeId dataType = m_dataType;
 
-                    if (OnReadDataType != null)
+                    NodeAttributeEventHandler<NodeId> onReadDataType = OnReadDataType;
+                    if (onReadDataType != null)
                     {
-                        result = OnReadDataType(context, this, ref dataType);
+                        result = onReadDataType(context, this, ref dataType);
                     }
 
                     if (ServiceResult.IsGood(result))
@@ -1341,9 +1403,10 @@ namespace Opc.Ua
                 {
                     int valueRank = m_valueRank;
 
-                    if (OnReadValueRank != null)
+                    NodeAttributeEventHandler<int> onReadValueRank = OnReadValueRank;
+                    if (onReadValueRank != null)
                     {
-                        result = OnReadValueRank(context, this, ref valueRank);
+                        result = onReadValueRank(context, this, ref valueRank);
                     }
 
                     if (ServiceResult.IsGood(result))
@@ -1358,9 +1421,10 @@ namespace Opc.Ua
                 {
                     IList<uint> arrayDimensions = m_arrayDimensions;
 
-                    if (OnReadArrayDimensions != null)
+                    NodeAttributeEventHandler<IList<uint>> onReadArrayDimensions = OnReadArrayDimensions;
+                    if (onReadArrayDimensions != null)
                     {
-                        result = OnReadArrayDimensions(context, this, ref arrayDimensions);
+                        result = onReadArrayDimensions(context, this, ref arrayDimensions);
                     }
 
                     if (ServiceResult.IsGood(result))
@@ -1375,9 +1439,10 @@ namespace Opc.Ua
                 {
                     byte accessLevel = m_accessLevel;
 
-                    if (OnReadAccessLevel != null)
+                    NodeAttributeEventHandler<byte> onReadAccessLevel = OnReadAccessLevel;
+                    if (onReadAccessLevel != null)
                     {
-                        result = OnReadAccessLevel(context, this, ref accessLevel);
+                        result = onReadAccessLevel(context, this, ref accessLevel);
                     }
 
                     if (ServiceResult.IsGood(result))
@@ -1392,9 +1457,10 @@ namespace Opc.Ua
                 {
                     byte userAccessLevel = m_userAccessLevel;
 
-                    if (OnReadUserAccessLevel != null)
+                    NodeAttributeEventHandler<byte> onReadUserAccessLevel = OnReadUserAccessLevel;
+                    if (onReadUserAccessLevel != null)
                     {
-                        result = OnReadUserAccessLevel(context, this, ref userAccessLevel);
+                        result = onReadUserAccessLevel(context, this, ref userAccessLevel);
                     }
 
                     if (ServiceResult.IsGood(result))
@@ -1409,9 +1475,10 @@ namespace Opc.Ua
                 {
                     double minimumSamplingInterval = m_minimumSamplingInterval;
 
-                    if (OnReadMinimumSamplingInterval != null)
+                    NodeAttributeEventHandler<double> onReadMinimumSamplingInterval = OnReadMinimumSamplingInterval;
+                    if (onReadMinimumSamplingInterval != null)
                     {
-                        result = OnReadMinimumSamplingInterval(context, this, ref minimumSamplingInterval);
+                        result = onReadMinimumSamplingInterval(context, this, ref minimumSamplingInterval);
                     }
 
                     if (ServiceResult.IsGood(result))
@@ -1426,9 +1493,10 @@ namespace Opc.Ua
                 {
                     bool historizing = m_historizing;
 
-                    if (OnReadHistorizing != null)
+                    NodeAttributeEventHandler<bool> onReadHistorizing = OnReadHistorizing;
+                    if (onReadHistorizing != null)
                     {
-                        result = OnReadHistorizing(context, this, ref historizing);
+                        result = onReadHistorizing(context, this, ref historizing);
                     }
 
                     if (ServiceResult.IsGood(result))
@@ -1490,22 +1558,29 @@ namespace Opc.Ua
                 return StatusCodes.BadUserAccessDenied;
             }
 
-            // ensure a value timestamp exists.
-            if (m_timestamp == DateTime.MinValue)
-            {
-                m_timestamp = DateTime.UtcNow;
-            }
+            StatusCode statusCode;
 
-            value = m_value;
-            sourceTimestamp = m_timestamp;
-            StatusCode statusCode = m_statusCode;
+            lock (m_valueLock)
+            {
+
+                // ensure a value timestamp exists.
+                if (m_timestamp == DateTime.MinValue)
+                {
+                    m_timestamp = DateTime.UtcNow;
+                }
+
+                value = m_value;
+                sourceTimestamp = m_timestamp;
+                statusCode = m_statusCode;
+            }
 
             ServiceResult result = null;
 
-            // check if the read behavior has been overridden.
-            if (OnReadValue != null)
+            NodeValueEventHandler onReadValue = this.OnReadValue;
+            // check if the read behavoir has been overridden.
+            if (onReadValue != null)
             {
-                result = OnReadValue(
+                result = onReadValue(
                     context,
                     this,
                     indexRange,
@@ -1528,10 +1603,11 @@ namespace Opc.Ua
                 return result;
             }
 
-            // use default behavior.
-            if (OnSimpleReadValue != null)
+            NodeValueSimpleEventHandler onSimpleReadValue = this.OnSimpleReadValue;
+            // use default behavoir.
+            if (onSimpleReadValue != null)
             {
-                result = OnSimpleReadValue(
+                result = onSimpleReadValue(
                     context,
                     this,
                     ref value);
@@ -1648,9 +1724,11 @@ namespace Opc.Ua
                         return StatusCodes.BadNotWritable;
                     }
 
-                    if (OnWriteDataType != null)
+                    NodeAttributeEventHandler<NodeId> onWriteDataType = OnWriteDataType;
+
+                    if (onWriteDataType != null)
                     {
-                        result = OnWriteDataType(context, this, ref dataType);
+                        result = onWriteDataType(context, this, ref dataType);
                     }
 
                     if (ServiceResult.IsGood(result))
@@ -1677,9 +1755,11 @@ namespace Opc.Ua
 
                     int valueRank = valueRankRef.Value;
 
-                    if (OnWriteValueRank != null)
+                    NodeAttributeEventHandler<int> onWriteValueRank = OnWriteValueRank;
+
+                    if (onWriteValueRank != null)
                     {
-                        result = OnWriteValueRank(context, this, ref valueRank);
+                        result = onWriteValueRank(context, this, ref valueRank);
                     }
 
                     if (ServiceResult.IsGood(result))
@@ -1699,9 +1779,11 @@ namespace Opc.Ua
                         return StatusCodes.BadNotWritable;
                     }
 
-                    if (OnWriteArrayDimensions != null)
+                    NodeAttributeEventHandler<IList<uint>> onWriteArrayDimensions = OnWriteArrayDimensions;
+
+                    if (onWriteArrayDimensions != null)
                     {
-                        result = OnWriteArrayDimensions(context, this, ref arrayDimensions);
+                        result = onWriteArrayDimensions(context, this, ref arrayDimensions);
                     }
 
                     if (ServiceResult.IsGood(result))
@@ -1735,9 +1817,11 @@ namespace Opc.Ua
 
                     byte accessLevel = accessLevelRef.Value;
 
-                    if (OnWriteAccessLevel != null)
+                    NodeAttributeEventHandler<byte> onWriteAccessLevel = OnWriteAccessLevel;
+
+                    if (onWriteAccessLevel != null)
                     {
-                        result = OnWriteAccessLevel(context, this, ref accessLevel);
+                        result = onWriteAccessLevel(context, this, ref accessLevel);
                     }
 
                     if (ServiceResult.IsGood(result))
@@ -1764,9 +1848,11 @@ namespace Opc.Ua
 
                     byte userAccessLevel = userAccessLevelRef.Value;
 
-                    if (OnWriteUserAccessLevel != null)
+                    NodeAttributeEventHandler<byte> onWriteUserAccessLevel = OnWriteUserAccessLevel;
+
+                    if (onWriteUserAccessLevel != null)
                     {
-                        result = OnWriteUserAccessLevel(context, this, ref userAccessLevel);
+                        result = onWriteUserAccessLevel(context, this, ref userAccessLevel);
                     }
 
                     if (ServiceResult.IsGood(result))
@@ -1793,9 +1879,11 @@ namespace Opc.Ua
 
                     double minimumSamplingInterval = minimumSamplingIntervalRef.Value;
 
-                    if (OnWriteMinimumSamplingInterval != null)
+                    NodeAttributeEventHandler<double> onWriteMinimumSamplingInterval = OnWriteMinimumSamplingInterval;
+
+                    if (onWriteMinimumSamplingInterval != null)
                     {
-                        result = OnWriteMinimumSamplingInterval(context, this, ref minimumSamplingInterval);
+                        result = onWriteMinimumSamplingInterval(context, this, ref minimumSamplingInterval);
                     }
 
                     if (ServiceResult.IsGood(result))
@@ -1822,9 +1910,11 @@ namespace Opc.Ua
 
                     bool historizing = historizingRef.Value;
 
-                    if (OnWriteHistorizing != null)
+                    NodeAttributeEventHandler<bool> onWriteHistorizing = OnWriteHistorizing;
+
+                    if (onWriteHistorizing != null)
                     {
-                        result = OnWriteHistorizing(context, this, ref historizing);
+                        result = onWriteHistorizing(context, this, ref historizing);
                     }
 
                     if (ServiceResult.IsGood(result))
@@ -1871,10 +1961,12 @@ namespace Opc.Ua
                 return StatusCodes.BadUserAccessDenied;
             }
 
-            // check if the write behavior has been overridden.
-            if (OnWriteValue != null)
+            NodeValueEventHandler onWriteValue = OnWriteValue;
+
+            // check if the write behavoir has been overridden.
+            if (onWriteValue != null)
             {
-                result = OnWriteValue(
+                result = onWriteValue(
                     context,
                     this,
                     indexRange,
@@ -1887,18 +1979,22 @@ namespace Opc.Ua
                 {
                     return result;
                 }
-                
-                m_value = value;
-                m_statusCode = statusCode;
-                m_timestamp = sourceTimestamp;
 
-                // update timestamp if not set by function.
-                if (sourceTimestamp == DateTime.MinValue)
+                lock (m_valueLock)
                 {
-                    m_timestamp = DateTime.UtcNow;
-                }
 
-                ChangeMasks |= NodeStateChangeMasks.Value;
+                    m_value = value;
+                    m_statusCode = statusCode;
+                    m_timestamp = sourceTimestamp;
+
+                    // update timestamp if not set by function.
+                    if (sourceTimestamp == DateTime.MinValue)
+                    {
+                        m_timestamp = DateTime.UtcNow;
+                    }
+
+                    ChangeMasks |= NodeStateChangeMasks.Value;
+                }
 
                 return result;
             }
@@ -1940,8 +2036,10 @@ namespace Opc.Ua
                 value = Utils.Clone(value);
             }
 
+            NodeValueSimpleEventHandler onSimpleWriteValue = OnSimpleWriteValue;
+
             // check for simple write value handler.
-            if (OnSimpleWriteValue != null)
+            if (onSimpleWriteValue != null)
             {
                 // index range writes not supported.
                 if (indexRange != NumericRange.Empty)
@@ -1949,7 +2047,7 @@ namespace Opc.Ua
                     return StatusCodes.BadIndexRangeInvalid;
                 }
 
-                result = OnSimpleWriteValue(
+                result = onSimpleWriteValue(
                     context,
                     this,
                     ref value);
@@ -1964,7 +2062,7 @@ namespace Opc.Ua
                 // apply the index range.
                 if (indexRange != NumericRange.Empty)
                 {
-                    object target = m_value;
+                    object target = Value;
                     result = indexRange.UpdateRange(ref target, value);
 
                     if (ServiceResult.IsBad(result))
@@ -1975,19 +2073,23 @@ namespace Opc.Ua
                     value = target;
                 }
             }
-            
-            // update cached values.
-            m_value = value;
-            m_statusCode = statusCode;
-            m_timestamp = sourceTimestamp;
 
-            ChangeMasks |= NodeStateChangeMasks.Value;
+            lock (m_valueLock)
+            {
+                // update cached values.
+                m_value = value;
+                m_statusCode = statusCode;
+                m_timestamp = sourceTimestamp;
+
+                ChangeMasks |= NodeStateChangeMasks.Value;
+            }
 
             return ServiceResult.Good;
         }
         #endregion
 
         #region Private Fields
+        private readonly object m_valueLock = new object();
         private object m_value;
         private bool m_isValueType;
         private DateTime m_timestamp;
@@ -2220,9 +2322,11 @@ namespace Opc.Ua
             ISystemContext context, 
             IList<BaseInstanceState> children)
         {
-            if (m_enumStrings != null)
+            PropertyState<LocalizedText[]> enumStrings = this.m_enumStrings;
+
+            if (enumStrings != null)
             {
-                children.Add(m_enumStrings);
+                children.Add(enumStrings);
             }
 
             base.GetChildren(context, children);

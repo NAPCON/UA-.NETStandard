@@ -84,18 +84,24 @@ namespace Opc.Ua
         {
             ViewState clone = new ViewState();
 
-            if (m_children != null)
+            lock (m_childrenLock)
             {
-                clone.m_children = new List<BaseInstanceState>(m_children.Count);
-
-                for (int ii = 0; ii < m_children.Count; ii++)
+                lock (clone.m_childrenLock)
                 {
-                    BaseInstanceState child = (BaseInstanceState)m_children[ii].MemberwiseClone();
-                    clone.m_children.Add(child);
+                    if (m_children != null)
+                    {
+                        clone.m_children = new List<BaseInstanceState>(m_children.Count);
+
+                        for (int ii = 0; ii < m_children.Count; ii++)
+                        {
+                            BaseInstanceState child = (BaseInstanceState)m_children[ii].MemberwiseClone();
+                            clone.m_children.Add(child);
+                        }
+                    }
+
+                    clone.m_changeMasks = NodeStateChangeMasks.None;
                 }
             }
-
-            clone.m_changeMasks = NodeStateChangeMasks.None;
 
             return clone;
         }
@@ -195,14 +201,18 @@ namespace Opc.Ua
 
             encoder.PushNamespace(Namespaces.OpcUaXsd);
 
-            if (m_eventNotifier != 0)
+            byte eventNotifier = this.m_eventNotifier;
+
+            if (eventNotifier != 0)
             {
-                encoder.WriteByte("EventNotifier", m_eventNotifier);
+                encoder.WriteByte("EventNotifier", eventNotifier);
             }
 
-            if (m_containsNoLoops)
+            bool containsNoLoops = this.m_containsNoLoops;
+
+            if (containsNoLoops)
             {
-                encoder.WriteBoolean("ContainsNoLoops", m_containsNoLoops);
+                encoder.WriteBoolean("ContainsNoLoops", containsNoLoops);
             }
 
             encoder.PopNamespace();
@@ -314,9 +324,11 @@ namespace Opc.Ua
                 {
                     byte eventNotifier = m_eventNotifier;
 
-                    if (OnReadEventNotifier != null)
+                    NodeAttributeEventHandler<byte> onReadEventNotifier = OnReadEventNotifier;
+
+                    if (onReadEventNotifier != null)
                     {
-                        result = OnReadEventNotifier(context, this, ref eventNotifier);
+                        result = onReadEventNotifier(context, this, ref eventNotifier);
                     }
 
                     if (ServiceResult.IsGood(result))
@@ -331,9 +343,11 @@ namespace Opc.Ua
                 {
                     bool containsNoLoops = m_containsNoLoops;
 
-                    if (OnReadContainsNoLoops != null)
+                    NodeAttributeEventHandler<bool> onReadContainsNoLoops = OnReadContainsNoLoops;
+
+                    if (onReadContainsNoLoops != null)
                     {
-                        result = OnReadContainsNoLoops(context, this, ref containsNoLoops);
+                        result = onReadContainsNoLoops(context, this, ref containsNoLoops);
                     }
 
                     if (ServiceResult.IsGood(result))
@@ -378,9 +392,11 @@ namespace Opc.Ua
 
                     byte eventNotifier = eventNotifierRef.Value;
 
-                    if (OnWriteEventNotifier != null)
+                    NodeAttributeEventHandler<byte> onWriteEventNotifier = OnWriteEventNotifier;
+
+                    if (onWriteEventNotifier != null)
                     {
-                        result = OnWriteEventNotifier(context, this, ref eventNotifier);
+                        result = onWriteEventNotifier(context, this, ref eventNotifier);
                     }
 
                     if (ServiceResult.IsGood(result))
