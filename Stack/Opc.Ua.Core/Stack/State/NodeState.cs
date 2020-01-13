@@ -4512,7 +4512,7 @@ namespace Opc.Ua
                 OnReferenceRemoved?.Invoke(this, referenceTypeId, isInverse, targetId);
             }
 
-            return false;
+            return removed;
         }
 
         /// <summary>
